@@ -10,14 +10,14 @@ export const DECISIONS = Object.freeze([
 ]);
 
 export const CALIBRATION = Object.freeze([
-  { id: 'weeklyDemand', label: '평균 주간 수요', unit: 'units / week', help: 'Round 1 판매 예측 또는 관측 주간 수요', kind: 'observed' },
-  { id: 'rawUnitValue', label: '원자재 단위 재고가치', unit: '€ / unit', help: '재고 평가액 ÷ 해당 원자재 수량', kind: 'observed' },
-  { id: 'fgUnitValue', label: '완제품 단위 재고가치', unit: '€ / unit', help: '재고 평가액 ÷ 해당 완제품 수량', kind: 'observed' },
-  { id: 'unitRevenue', label: '완제품 단위 매출', unit: '€ / unit', help: '판매 예측 수량에 대응하는 매출 단가', kind: 'observed' },
-  { id: 'roundWeeks', label: '계산 대상 기간', unit: 'weeks', help: '이번 시나리오가 포괄하는 기간', kind: 'assumed' },
-  { id: 'annualHoldingRate', label: '연간 재고보유비율', unit: '% / year', help: 'TFC 내부 계수 미확인. 사용자가 보정하는 가정', kind: 'assumed' },
-  { id: 'servicePpPerWeek', label: '안전재고 1주당 서비스 변화', unit: '%p / week', help: 'TFC 내부 계수 미확인. 실제 라운드 관측 후 보정', kind: 'assumed' },
-  { id: 'obsolescenceRate', label: '완제품 재고 증분 중 진부화 비율', unit: '% / round', help: 'TFC 내부 계수 미확인. 실제 라운드 관측 후 보정', kind: 'assumed' }
+  { id: 'weeklyDemand', label: '주당 수요(개)', unit: '개 / 주', help: '판매 > 완제품 보고서의 「주당 수요(개)」에 해당하는 입력값', kind: 'observed' },
+  { id: 'rawUnitValue', label: '원자재 재고 단가', unit: '€ / 개 또는 리터', help: '공급사슬 > 원자재 보고서의 「재고 금액 ÷ 재고(개수 또는 리터)」로 계산', kind: 'derived' },
+  { id: 'fgUnitValue', label: '완제품 재고 단가', unit: '€ / 개', help: '공급사슬 > 완제품 보고서의 「재고 금액」을 추정 재고 수량으로 나눈 모형 입력값', kind: 'derived' },
+  { id: 'unitRevenue', label: '판매 단가', unit: '€ / 개', help: '판매 > 완제품 보고서의 「판매 단가」에 해당하는 입력값', kind: 'observed' },
+  { id: 'roundWeeks', label: '시뮬레이션 기간', unit: 'weeks', help: '이번 시나리오에서 계산할 기간. TFC 보고서 항목이 아닌 모형 설정', kind: 'assumed' },
+  { id: 'annualHoldingRate', label: '재고 보유비율 (연간)', unit: '% / year', help: '재고 금액에 적용할 연간 보유비율. TFC 내부 계수 미확인', kind: 'assumed' },
+  { id: 'servicePpPerWeek', label: '서비스수준(개수) 변화', unit: '%p / week', help: '완제품 「안전재고 (weeks)」를 1주 늘렸을 때의 변화. TFC 내부 계수 미확인', kind: 'assumed' },
+  { id: 'obsolescenceRate', label: '추가 완제품 재고의 진부화율', unit: '% / round', help: '공급사슬 > 완제품의 「진부화」와 관련된 모형 가정. TFC 내부 계수 미확인', kind: 'assumed' }
 ]);
 
 export const emptyDecisions = () => Object.fromEntries(DECISIONS.map(d => [d.id, { base: null, scenario: null }]));

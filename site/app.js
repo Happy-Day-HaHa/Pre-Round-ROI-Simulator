@@ -11,6 +11,7 @@ const h=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt
 const fmt=(v,d=0)=>new Intl.NumberFormat('ko-KR',{minimumFractionDigits:d,maximumFractionDigits:d}).format(v);
 const euro=v=>`${v<0?'−':''}€ ${fmt(Math.abs(v))}`;
 const pct=v=>`${fmt(v,2)}%`;
+const calibrationKind=kind=>({observed:'보고서 값',derived:'보고서 기반 계산값',assumed:'모형 가정'})[kind];
 const editKey=(kind,name)=>`${kind}:${name}`;
 const record=(kind,name,original)=>({...original,...(state.round===1?state.edits[editKey(kind,name)]||{}:{})});
 const source=n=>`<p class="source-line">출처: 첨부 화면 #${n} · 화면에 보이는 수치를 옮겼습니다.</p>`;
@@ -152,7 +153,7 @@ function simulatorView(){
   const ys=points.map(p=>p[1]).filter(Number.isFinite),min=Math.min(...ys),max=Math.max(...ys),range=Math.max(0.01,max-min);
   return `${heading('완제품 안전재고 민감도')}${result.ready?`<div class="sensitivity-bars">${points.map(([x,y])=>`<div><strong>${pct(y)}</strong><span class="bar-track"><span style="height:${Math.round(20+70*(y-min)/range)}%"></span></span><small>${fmt(x,1)} weeks</small></div>`).join('')}</div><p class="footnote">안전재고만 0.5주씩 변경한 기존 대체 모형의 결과입니다. 서비스와 진부화 계수는 사용자가 입력한 가정입니다.</p>`:'<div class="guidance"><p>모든 품목의 설정이 같고 필요한 보정값이 입력되면 민감도를 계산합니다.</p></div>'}`;
  }
- if(state.tab==='모형 입력값')return `${heading('모형 입력값')}<div class="guidance"><h3>보정 데이터</h3><p>값을 입력하면 정량 계산에 사용합니다. TFC 내부 계수는 확인되지 않았으며, 가정값은 실제 게임 공식이 아닙니다.</p><button class="save-button" data-open-calibration type="button">모형 입력값 설정</button></div>${table('입력 상태',['항목','값','구분'],CALIBRATION.map(c=>[c.label,state.calibration[c.id]??'미입력',c.kind==='observed'?'관측 입력':'가정 입력']))}`;
+ if(state.tab==='모형 입력값')return `${heading('모형 입력값')}<div class="guidance"><h3>보고서 값과 모형 가정</h3><p>TFC 보고서 항목과 보고서 기반 계산값을 입력하세요. TFC 내부 계수를 확인할 수 없는 항목은 모형 가정으로 표시합니다.</p><button class="save-button" data-open-calibration type="button">모형 입력값 설정</button></div>${table('입력 상태',['항목','값','구분'],CALIBRATION.map(c=>[c.label,state.calibration[c.id]??'미입력',calibrationKind(c.kind)]))}`;
  if(state.tab==='설명 경로')return `${heading('설명 경로')}<div class="guidance"><h3>의사결정 → KPI → 재무 → ROI</h3><p>원자재 안전재고·주문크기와 완제품 안전재고·생산간격이 모두 각 품목에 동일하게 설정된 경우에만 기존 집계 모형으로 연결합니다.</p><p>제품별 수요와 비용 데이터가 없어 품목별 변경을 임의 평균으로 환산하지 않습니다. 구매, 생산운영, 판매의 변경값 역시 현재 ROI 수치에는 포함되지 않습니다.</p><p>ROI = 영업이익 ÷ 총 투자자본. 보정값이 완성되면 각 비용·수익 변화의 계산 경로를 표시합니다.</p></div>${result.ready?table('조건부 결과',['단계','값'],[['원자재 재고 변화',euro(result.rawInventoryDelta)],['완제품 재고 변화',euro(result.fgInventoryDelta)],['재고보유비 변화',euro(result.holdingCostDelta)],['매출 변화',euro(result.revenueDelta)],['진부화 비용 변화',euro(result.obsolescenceCostDelta)],['영업이익 변화',euro(result.profitDelta)],['총 투자자본 변화',euro(result.inventoryDelta)],['ROI',pct(result.roi)] ]):'<p class="footnote">필요한 결정값 또는 보정값이 부족하여 정량 경로를 표시할 수 없습니다.</p>'}`;
  const invalid=Object.entries(decisions).filter(([k,v])=>k!=='frozenPeriod'&&v.scenario===null).map(([k])=>k);
  return `${heading('Round 1 · 사전 의사결정 시뮬레이터')}<div class="simulation-summary"><div><small>ROUND 0 · 관측</small><strong>${pct(BASELINE.reportedRoi)}</strong><span>실현된 기준점</span></div><div><small>ROUND 1 · 조건부 추정</small><strong>${result.ready?pct(result.roi):'계산 대기'}</strong><span>${result.ready?'사용자 보정값을 적용한 시나리오':'실현 성과 아님'}</span></div></div><div class="guidance"><h3>결정값 연결 상태</h3><p>${invalid.length?'품목별 설정이 달라 단일 집계값으로 표현할 수 없습니다: '+invalid.join(', '):'원자재 5종 및 완제품 6종의 설정이 각 항목에서 동일하므로 집계 모형에 연결했습니다.'}</p><p>보정 입력 ${CALIBRATION.filter(c=>state.calibration[c.id]!=null).length} / ${CALIBRATION.length}개 완료. 현재 추정은 Round 0 회계를 기준으로 한 조건부 모형입니다.</p><button class="save-button" data-open-calibration type="button">모형 입력값 설정</button></div>${table('Round 1 설정',['의사결정','Round 0 기록','Round 1 현재'],[['원자재 안전재고','2.0 weeks',decisions.rawSafety.scenario??'품목별 상이'],['원자재 주문크기','4.0 weeks',decisions.rawLot.scenario??'품목별 상이'],['완제품 안전재고','3.0 weeks',decisions.fgSafety.scenario??'품목별 상이'],['생산간격','10 days',decisions.productionInterval.scenario??'품목별 상이'],['생산확정 구간','3 weeks',decisions.frozenPeriod.scenario??'미입력']])}`;
@@ -184,7 +185,7 @@ function openEdit(kind,name){
  document.querySelector('#edit-dialog').showModal();
 }
 function openCalibration(){
- document.querySelector('#calibration-fields').innerHTML=CALIBRATION.map(c=>`<label class="edit-field"><span>${h(c.label)} <small>${c.kind==='observed'?'관측 입력':'가정 입력'}</small></span><input type="number" min="0" step="any" name="${h(c.id)}" value="${state.calibration[c.id]??''}" placeholder="미입력"><small>${h(c.help)} · ${h(c.unit)}</small></label>`).join('');
+ document.querySelector('#calibration-fields').innerHTML=CALIBRATION.map(c=>`<label class="edit-field"><span>${h(c.label)} <small>${calibrationKind(c.kind)}</small></span><input type="number" min="0" step="any" name="${h(c.id)}" value="${state.calibration[c.id]??''}" placeholder="미입력"><small>${h(c.help)} · ${h(c.unit)}</small></label>`).join('');
  document.querySelector('#calibration-dialog').showModal();
 }
 document.addEventListener('click',e=>{
