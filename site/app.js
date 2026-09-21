@@ -1,149 +1,216 @@
-import { BASELINE, DECISIONS, CALIBRATION, emptyDecisions, emptyCalibration, observedRoi, simulate } from './model.js';
+import {BASELINE, CALIBRATION, emptyCalibration, simulate} from './model.js';
+import {PRODUCTS, MATERIALS, CUSTOMERS, DEPARTMENTS, TABS, CURRENT_TABS, SUPPLIERS, CUSTOMER_CONTRACTS, SCM_MATERIAL_VALUES, SCM_PRODUCT_VALUES, SALES_PRODUCT_REPORT, SCM_RAW_REPORT, SCM_FG_REPORT} from './screens.js';
 
-const KEY = 'tfc-digital-twin-v1';
-const NAV = [
-  { section: 'OVERVIEW', items: [['dashboard', '대시보드', '▦']] },
-  { section: 'DECISIONS', items: [['supply', 'Supply Chain', '◈'], ['purchasing', 'Purchasing', '◇'], ['operations', 'Operations', '▤'], ['sales', 'Sales', '▥']] },
-  { section: 'ANALYSIS', items: [['finance', 'Finance', '◫'], ['scenarios', 'Scenario Compare', '◉'], ['sensitivity', 'Sensitivity', '⌁'], ['data', 'Data / Assumptions', '☷']] }
-];
-const TITLES = Object.fromEntries(NAV.flatMap(g => g.items.map(([id, title]) => [id, title])));
-const initial = { page: 'dashboard', decisions: emptyDecisions(), calibration: emptyCalibration(), scenarios: [], activeScenario: 'current', metric: 'roi' };
-let state = load();
-
-function load() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(KEY) || '{}');
-    return { ...initial, ...saved, decisions: { ...emptyDecisions(), ...saved.decisions }, calibration: { ...emptyCalibration(), ...saved.calibration }, page: 'dashboard' };
-  } catch { return structuredClone(initial); }
+const KEY='tfc-screen-ui-v2';
+const defaults={area:'company',round:1,tab:'대시보드',edits:{},calibration:emptyCalibration(),scenarios:[]};
+let state=load();
+let editing=null;
+function load(){try{const saved=JSON.parse(localStorage.getItem(KEY)||'{}');return {...defaults,...saved,edits:saved.edits||{},calibration:{...emptyCalibration(),...saved.calibration},scenarios:Array.isArray(saved.scenarios)?saved.scenarios:[]}}catch{return structuredClone(defaults)}}
+function persist(){localStorage.setItem(KEY,JSON.stringify(state));document.querySelector('#saved-state').textContent='변경 내용 저장됨'}
+const h=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=(v,d=0)=>new Intl.NumberFormat('ko-KR',{minimumFractionDigits:d,maximumFractionDigits:d}).format(v);
+const euro=v=>`${v<0?'−':''}€ ${fmt(Math.abs(v))}`;
+const pct=v=>`${fmt(v,2)}%`;
+const editKey=(kind,name)=>`${kind}:${name}`;
+const record=(kind,name,original)=>({...original,...(state.round===1?state.edits[editKey(kind,name)]||{}:{})});
+const source=n=>`<p class="source-line">출처: 첨부 화면 #${n} · 화면에 보이는 수치를 옮겼습니다.</p>`;
+const info=label=>`<span class="info-dot" aria-label="${h(label)} 정보">i</span>`;
+const heading=title=>`<div class="group-title">${h(title)}</div>`;
+const entity=name=>`<div class="entity-title"><span class="bulb" aria-hidden="true">♟</span>${h(name)}</div>`;
+const editButton=(kind,name)=>state.round===1?`<button class="change-button" type="button" data-edit="${h(kind)}" data-name="${h(name)}">변경</button>`:'';
+const row=(label,value)=>`<div class="detail-row"><div>${info(label)}${h(label)}</div><strong class="${value==='✓'?'yes':value==='✕'?'no':''}">${h(value)}</strong></div>`;
+const fields=(labels,values)=>labels.map((x,i)=>row(x,values[i])).join('');
+function table(title,headers,rows,opts={}) {
+  return `${heading(title)}<div class="table-scroll"><table class="report-table"><thead><tr>${headers.map(x=>`<th>${h(x)}</th>`).join('')}${opts.editKind?'<th class="action-column"></th>':''}</tr></thead><tbody>${rows.map((r,i)=>`<tr>${r.map((x,j)=>`<td class="${j===0?'row-label':''}">${opts.htmlLast&&j===r.length-1?x:h(x)}</td>`).join('')}${opts.editKind?`<td>${editButton(opts.editKind,opts.names?.[i]||r[0])}</td>`:''}</tr>`).join('')}</tbody></table></div>${opts.source?source(opts.source):''}`;
 }
-function persist() { localStorage.setItem(KEY, JSON.stringify(state)); }
-const number = (v, digits = 0) => v == null || !Number.isFinite(v) ? '—' : new Intl.NumberFormat('ko-KR', { maximumFractionDigits: digits, minimumFractionDigits: digits }).format(v);
-const euro = (v, digits = 0) => v == null || !Number.isFinite(v) ? '—' : `${v < 0 ? '−' : ''}€${number(Math.abs(v), digits)}`;
-const percent = (v, digits = 2) => v == null || !Number.isFinite(v) ? '—' : `${v > 0 ? '+' : v < 0 ? '−' : ''}${number(Math.abs(v), digits)}%`;
-const delta = (v, suffix = '') => v == null || !Number.isFinite(v) ? '—' : `${v > 0 ? '+' : v < 0 ? '−' : ''}${number(Math.abs(v), 2)}${suffix}`;
-const escapeHtml = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const model = () => simulate(state.decisions, state.calibration);
-const pill = (text, cls = '') => `<span class="pill ${cls}">${text}</span>`;
-const valueOrUnknown = (v, formatter = euro) => v == null ? '<span class="unknown-value">데이터 대기</span>' : formatter(v);
-
-function pageHead(kicker, title, description, action = '') {
-  return `<div class="page-header"><div><span class="eyebrow">${kicker}</span><h1>${title}</h1><p>${description}</p></div>${action}</div>`;
+function cardBlock(title,name,labels,values,kind,sourceNumber){
+  return `${heading(title)}${entity(name)}<div class="detail-list">${fields(labels,values)}<div class="detail-action">${editButton(kind,name)}</div></div>${source(sourceNumber)}`;
 }
-function renderNav() {
-  document.querySelector('#nav').innerHTML = NAV.map(group => `<div class="nav-group"><span class="nav-heading">${group.section}</span>${group.items.map(([id, title, icon]) => `<button class="nav-item ${state.page === id ? 'active' : ''}" data-page="${id}"><span class="nav-icon">${icon}</span><span>${title}</span>${id === 'supply' ? '<span class="nav-featured">CORE</span>' : ''}</button>`).join('')}</div>`).join('');
-  document.querySelector('#breadcrumb-current').textContent = TITLES[state.page];
+function roundLabel(){return state.round===1?'라운드(회차) 1 <small>(현재)</small>':'라운드(회차) 0 <small>(완료)</small>'}
+function tabsFor(){if(state.area==='company')return ['대시보드','자료 안내'];if(state.area==='finance')return ['재무보고서'];if(state.area==='simulator')return ['시나리오','시나리오 비교','민감도','모형 입력값','설명 경로'];return state.round===1?CURRENT_TABS[state.area]:TABS[state.area]}
+function select(area,tab){state.area=area;if(area==='simulator')state.round=1;state.tab=tab||tabsForArea(area)[0];persist();render();window.scrollTo({top:0,behavior:'smooth'})}
+function tabsForArea(area){if(area==='company')return ['대시보드','자료 안내'];if(area==='finance')return ['재무보고서'];if(area==='simulator')return ['시나리오','시나리오 비교','민감도','모형 입력값','설명 경로'];return state.round===1?CURRENT_TABS[area]:TABS[area]}
+function renderChrome(){
+ document.querySelectorAll('.rail-link').forEach(b=>b.classList.toggle('active',b.dataset.area===state.area));
+ document.querySelector('#round-list').innerHTML=Array.from({length:7},(_,n)=>`<button type="button" data-round="${n}" class="round-item ${n===state.round?'active':''} ${n>1?'future':''}" ${n>1?'disabled aria-label="회차 '+n+'은 아직 시작하지 않았습니다"':''}><span class="round-dot"></span><span>${n}</span></button>`).join('');
+ document.querySelector('#department-bar').innerHTML=`<div class="round-label">${roundLabel()}</div>${DEPARTMENTS.map(d=>`<button type="button" data-dept="${d.id}" class="dept-button ${state.area===d.id?'active':''}"><span>${d.icon}</span>${d.label}</button>`).join('')}`;
+ const tabs=tabsFor();if(!tabs.includes(state.tab)){state.tab=tabs[0];persist()}
+ document.querySelector('#subtabs').innerHTML=tabs.map(t=>`<button type="button" class="subtab ${state.tab===t?'active':''}" data-tab="${h(t)}">${h(t)}</button>`).join('');
+ document.querySelector('#page-message').innerHTML=state.round===0?'<span class="message-dot"></span> Round 0 · 완료된 기록입니다. 이 화면은 읽기 전용입니다.':state.area==='simulator'?'<span class="message-dot"></span> Round 1 · 조건부 시나리오입니다. 실제 성과는 아직 관측되지 않았습니다.':'';
 }
-function metricCard(label, value, foot, status = '') {
-  return `<div class="metric-card"><div class="metric-top"><span>${label}</span>${status ? pill(status, status === '관측' ? 'observed' : 'estimated') : ''}</div><strong>${value}</strong><small>${foot}</small></div>`;
+function companyView(){
+ if(state.tab==='자료 안내')return `${heading('자료와 표시 기준')}<div class="guidance"><h2>화면 사용 안내</h2><p>첨부된 The Fresh Connection 화면을 기준으로 회차, 부서, 업무 탭과 결정 변경 흐름을 구성했습니다. 화면의 관측값은 해당 이미지 번호를 표시합니다.</p><p>Round 0은 완료된 실적이며 Round 1은 현재 의사결정 화면입니다. Round 1 ROI는 실현되지 않았습니다. 향후 회차는 선택할 수 없습니다.</p><p>브라우저에 저장한 변경값은 이 기기에서만 유지됩니다. 시뮬레이터의 정량 결과는 별도 보정값이 있을 때만 계산합니다.</p></div>`;
+ const rows=[['투자수익률 (ROI)',pct(BASELINE.reportedRoi),'Round 0 관측'],['영업이익',euro(BASELINE.operatingProfit),'Round 0 관측'],['총 투자자본',euro(BASELINE.investment),'Round 0 관측']];
+ return `${heading('회사 대시보드')}<div class="overview-intro"><div><span class="overline">THE FRESH CONNECTION</span><h1>${state.round===0?'Round 0 결과':'Round 1 의사결정'}</h1><p>${state.round===0?'완료된 라운드의 재무 기준점입니다.':'부서를 선택해 현재 계약과 운영 설정을 검토하고 변경하세요.'}</p></div><span class="round-badge">${state.round===0?'완료된 결과':'진행 중'}</span></div>${table('재무 기준', ['지표','값','상태'],rows)}<div class="jump-grid">${DEPARTMENTS.map(d=>`<button class="jump-card" data-dept="${d.id}"><span class="jump-icon">${d.icon}</span><strong>${d.label}</strong><small>보고서와 의사결정 보기 →</small></button>`).join('')}</div><p class="footnote">Round 0 재무 기준: FinanceReport_0라운드.xlsx 추출 수치 · DATA_COVERAGE_AUDIT.md. Round 1 실적은 미관측입니다.</p>`;
 }
-function dashboard(m) {
-  const roi = m.ready ? m.roi : null;
-  return `${pageHead('CONTROL ROOM / ROUND 1', '의사결정 전, 결과를 먼저.', 'Round 0 재무를 기준점으로 삼은 조건부 추정입니다. Round 1 실적 예측으로 확정할 수 없습니다.', '<button class="primary-button" data-page="supply">의사결정 시작 <span>→</span></button>')}
-    <div class="hero-panel"><div><span class="hero-label"><span class="live-dot"></span> ROUND 1 SCENARIO</span><h2>예상 ROI <span>${valueOrUnknown(roi, percent)}</span></h2><p>${m.ready ? `Round 0 대비 ${delta(m.roi - observedRoi, '%p')} · 사용자 입력 가정 기반` : '필요한 의사결정 값과 모형 입력값을 입력하면 결과를 계산합니다.'}</p></div><div class="hero-baseline"><span>ROUND 0 · OBSERVED</span><strong>${percent(observedRoi)}</strong><small>보고서 표기 ${number(BASELINE.reportedRoi, 2)}%</small></div></div>
-    <div class="metric-grid">${metricCard('영업이익', valueOrUnknown(m.ready ? m.operatingProfit : null), m.ready ? `기준 대비 ${euro(m.profitDelta)}` : `Round 0 ${euro(BASELINE.operatingProfit)}`, m.ready ? '추정' : '관측 기준')}${metricCard('총 투자자본', valueOrUnknown(m.ready ? m.investment : null), m.ready ? `기준 대비 ${euro(m.inventoryDelta)}` : `Round 0 ${euro(BASELINE.investment)}`, m.ready ? '추정' : '관측 기준')}${metricCard('재고자산 변화', valueOrUnknown(m.ready ? m.inventoryDelta : null), '원자재 + 완제품의 모형상 증감', '추정')}${metricCard('서비스 변화', m.ready ? delta(m.serviceDeltaPp, '%p') : '<span class="unknown-value">데이터 대기</span>', '완제품 안전재고 기준 대체 모형', '추정')}</div>
-    <div class="content-grid"><section class="surface"><div class="section-heading"><div><span class="eyebrow">CAUSE → EFFECT</span><h2>ROI Driver Map</h2></div>${pill('설명 가능 모형')}</div><div class="driver-map"><div class="driver-root"><span>EXPECTED ROI</span><strong>${valueOrUnknown(roi, percent)}</strong></div><div class="driver-split"><div class="driver-box"><span>영업이익</span><strong>${valueOrUnknown(m.ready ? m.operatingProfit : null)}</strong><small>매출 영향 · 재고보유비 · 진부화</small></div><div class="driver-box"><span>총 투자자본</span><strong>${valueOrUnknown(m.ready ? m.investment : null)}</strong><small>원자재 재고 · 완제품 재고</small></div></div></div><div class="formula-strip">ROI = Operating Profit ÷ Total Investment <span>·</span> 확정된 회계 항등식</div></section>
-    <section class="surface side-surface"><div class="section-heading"><div><span class="eyebrow">MODEL READINESS</span><h2>시뮬레이션 준비</h2></div></div>${readiness(m)}<button class="wide-link" data-page="data">데이터와 가정 확인 <span>→</span></button></section></div>
-    <section class="surface lower-panel"><div class="section-heading"><div><span class="eyebrow">NEXT ACTION</span><h2>시나리오 워크플로</h2></div></div><div class="flow-steps"><div><b>01</b><strong>의사결정 입력</strong><span>Round 1 현재값과 변경값을 입력</span></div><div><b>02</b><strong>모형 보정</strong><span>관측값과 가정 계수를 분리</span></div><div><b>03</b><strong>ROI 확인</strong><span>재무 변화와 인과 경로 비교</span></div></div></section>`;
+function purchasingCurrent(){
+ return SUPPLIERS.map(s=>{const v=record('supplier',s.name,s);return cardBlock(s.material,v.name,['계약지수','품질','리드타임 (days)','인증','국가','여유캐파','지불조건 (weeks)','거래단위','합의된 납품신뢰성 (%)','납품구간'],[v.index,v.quality,v.lead,v.cert,v.country,v.capacity,v.payment,v.unit,v.reliability,v.window],'supplier',s.source)}).join('');
 }
-function readiness(m) {
-  return `<div class="readiness-list"><div><span class="check ok">✓</span><div><strong>Round 0 재무 기준</strong><small>영업이익 · 투자자본 · ROI 확인</small></div></div><div><span class="check ${m.missingDecisions?.length ? '' : 'ok'}">${m.missingDecisions?.length ? '2' : '✓'}</span><div><strong>Round 1 의사결정</strong><small>${m.missingDecisions?.length ? `${m.missingDecisions.length}개 항목의 현재값 / 변경값 필요` : '입력 완료'}</small></div></div><div><span class="check ${m.missingCalibration?.length ? '' : 'ok'}">${m.missingCalibration?.length ? '3' : '✓'}</span><div><strong>재무 환산 입력값</strong><small>${m.missingCalibration?.length ? `${m.missingCalibration.length}개 관측·가정 입력 필요` : '입력 완료'}</small></div></div></div>`;
+function salesCurrent(){
+ if(state.tab==='주문관리'){const value=record('order','재고부족 시 분배규칙',{rule:'비율별'});return `${heading('주문관리')}${fields(['재고부족 시 분배규칙'],[value.rule])}<div class="detail-action">${editButton('order','재고부족 시 분배규칙')}</div>${source(25)}`}
+ if(state.tab==='카테고리 관리'){const categories=record('categories','고객별 제품 구성',originalFor('categories','고객별 제품 구성'));return `${heading('카테고리 관리')}${table('고객', ['제품',...CUSTOMERS],PRODUCTS.map((p,j)=>[p,...CUSTOMERS.map((c,i)=>categories[`${i}:${j}`]?'✓':'✕')]),{source:25})}<div class="detail-action">${editButton('categories','고객별 제품 구성')}</div>`;}
+ return CUSTOMER_CONTRACTS.map(c=>{const v=record('customer',c.name,c);return cardBlock('고객',v.name,['계약지수','서비스수준 유형','서비스수준 (%)','유통기한 (%)','주문 마감시간','거래단위','지불조건 (weeks)','판촉압력','판촉행사 사전예고'],[v.index,v.type,v.service,v.shelf,v.cutoff,v.unit,v.payment,v.pressure,v.forecast],'customer',c.source)}).join('');
 }
-function decisionRow(d) {
-  const v = state.decisions[d.id]; const changed = v.base != null && v.scenario != null && v.base !== v.scenario;
-  return `<div class="decision-row"><div class="decision-name"><strong>${d.label}</strong><span>${d.effect}</span><small>${d.source}</small></div><div class="decision-input"><label>현재 Round 1 값<input inputmode="decimal" type="number" min="0" step="any" placeholder="미확인" data-decision="${d.id}" data-side="base" value="${v.base ?? ''}"></label><span class="input-arrow">→</span><label>시나리오<input inputmode="decimal" type="number" min="0" step="any" placeholder="입력" data-decision="${d.id}" data-side="scenario" value="${v.scenario ?? ''}"></label><span class="unit">${d.unit}</span></div>${changed ? pill('변경됨', 'modified') : '<span class="row-empty"></span>'}</div>`;
+function operationBlock(tab){
+ if(tab==='원자재 입고'){const v=record('warehouse','원자재 창고',{pallet:'900',staff:'5',source:35});return cardBlock('원자재 창고','원자재 창고',['파레트 위치 개수','정직원 수'],[v.pallet,v.staff],'warehouse',35)}
+ if(tab==='완제품 출고'){const v=record('warehouse','네덜란드 유통센터',{pallet:'1500',staff:'4',source:18});return cardBlock('완제품 창고','네덜란드 유통센터',['파레트 위치 개수','정직원 수'],[v.pallet,v.staff],'warehouse',18)}
+ if(tab==='혼합공정'){const v=record('mixing','푸르트믹스 MQ',{machine:'푸르트믹스 MQ',source:35});return cardBlock('혼합기 사용가능',v.machine,['혼합기'],[v.machine],'mixing',35)}
+ const v=record('bottling','스위스 필2',{line:'스위스 필2',shifts:'2',smed:'사용',speed:'사용 안 함',source:35});return cardBlock('라인 설정',v.line,['용기주입 라인','교대근무 횟수','SMED','속도 증가'],[v.line,v.shifts,v.smed,v.speed],'bottling',35);
 }
-function supply(m) {
-  return `${pageHead('DECISION WORKSPACE / SCM', 'Supply Chain', '실제 Round 1 값이 제공되지 않은 항목은 빈 칸으로 두었습니다. 현재값과 변경값을 입력해 비교하세요.', '<button class="primary-button" data-action="run">시뮬레이션 실행 <span>↗</span></button>')}
-    <div class="supply-layout"><div><div class="section-tabs"><button class="section-tab active">재고 · 생산 계획</button><span>모든 값의 단위와 출처를 함께 표시합니다.</span></div><section class="surface decision-surface"><div class="section-heading"><div><span class="eyebrow">ROUND 1 DECISIONS</span><h2>의사결정 변수</h2></div>${pill('현재값 미제공', 'neutral')}</div><div class="decision-list">${DECISIONS.map(decisionRow).join('')}</div><div class="decision-footer"><span>값을 입력해도 시뮬레이션은 필수 보정값이 모두 있을 때만 계산됩니다.</span><button class="text-link" data-action="open-calibration">모형 입력값 설정 →</button></div></section></div>
-    <aside class="impact-column"><section class="surface impact-surface"><span class="eyebrow">LIVE IMPACT</span><h2>예상 영향</h2>${m.ready ? `<div class="impact-stat"><span>예상 ROI</span><strong>${percent(m.roi)}</strong><small>Round 0 대비 ${delta(m.roi - observedRoi, '%p')}</small></div><div class="impact-rows"><div><span>원자재 재고</span><strong>${euro(m.rawInventoryDelta)}</strong></div><div><span>완제품 재고</span><strong>${euro(m.fgInventoryDelta)}</strong></div><div><span>재고보유비</span><strong>${euro(m.holdingCostDelta)}</strong></div><div><span>매출 변화</span><strong>${euro(m.revenueDelta)}</strong></div><div><span>진부화 비용</span><strong>${euro(m.obsolescenceCostDelta)}</strong></div></div>` : `<div class="empty-impact"><div class="empty-symbol">◈</div><strong>추정 대기</strong><p>정량 변수 4개와 보정 입력 8개를 채우면 재고, 영업이익, 투자자본, ROI를 계산합니다. 생산 확정구간은 정성 변수입니다.</p></div>`}<button class="wide-link" data-page="finance">재무 브리지 보기 <span>→</span></button></section><div class="source-note"><strong>Source-backed relationship</strong><p>완제품 안전재고 증가는 서비스 수준을 높일 수 있지만 재고, 운전자본, 진부화 위험도 키웁니다.</p><small>역할별 의사결정 보충 설명 · p.33</small></div></aside></div>`;
+function operationsCurrent(){return operationBlock(state.tab)}
+function scmCurrent(){
+ if(state.tab==='원자재')return table('재고관리 요소',['원자재','안전재고 (weeks)','주문크기 (weeks)'],SCM_MATERIAL_VALUES.map(m=>{const v=record('material',m.name,m);return [m.name,v.safety,v.lot]}),{editKind:'material',names:MATERIALS,source:26});
+ if(state.tab==='생산'){const v=record('production','생산관리',{frozen:'3'});return `${heading('생산관리')}${fields(['생산확정 구간 (weeks)'],[v.frozen])}<div class="detail-action">${editButton('production','생산관리')}</div>${source(26)}`}
+ return table('완제품 재고관리',['완제품','생산간격 (days)','안전재고 (weeks)','창고'],SCM_PRODUCT_VALUES.map(p=>{const v=record('product',p.name,p);return [p.name,v.interval,v.safety,v.warehouse]}),{editKind:'product',names:PRODUCTS,source:26});
 }
-function finance(m) {
-  const rows = [
-    ['매출 증감', null, m.ready ? m.revenueDelta : null, '추정 · 서비스 대체 모형'],
-    ['재고보유비 증감', null, m.ready ? m.holdingCostDelta : null, '추정 · 사용자 보유비율'],
-    ['진부화 비용 증감', null, m.ready ? m.obsolescenceCostDelta : null, '추정 · 사용자 비율'],
-    ['영업이익', BASELINE.operatingProfit, m.ready ? m.operatingProfit : null, 'Round 0 관측 → 시나리오 추정'],
-    ['총 투자자본', BASELINE.investment, m.ready ? m.investment : null, 'Round 0 관측 → 시나리오 추정'],
-    ['ROI', observedRoi, m.ready ? m.roi : null, '회계 항등식']
-  ];
-  return `${pageHead('FINANCIAL BRIDGE', 'Finance', '관측된 Round 0 기준점과 사용자 입력에 따른 변화분을 나란히 봅니다. Round 1 현재 상태의 재무 추정값은 아닙니다.')}
-    <section class="surface finance-surface"><div class="section-heading"><div><span class="eyebrow">PROFIT & INVESTMENT</span><h2>기준점에서 시나리오까지</h2></div>${pill('Round 1 실적 아님', 'neutral')}</div><div class="table-wrap"><table><thead><tr><th>항목</th><th>Round 0 기준</th><th>시나리오</th><th>값의 성격</th></tr></thead><tbody>${rows.map(([name, base, scenario, status]) => `<tr class="${['영업이익','총 투자자본','ROI'].includes(name) ? 'strong-row' : ''}"><td>${name}</td><td>${base == null ? '—' : name === 'ROI' ? percent(base) : euro(base)}</td><td>${scenario == null ? '<span class="unknown-value">미계산</span>' : name === 'ROI' ? percent(scenario) : euro(scenario)}</td><td><span class="status-text">${status}</span></td></tr>`).join('')}</tbody></table></div><div class="finance-note">매출과 비용의 절대액은 원본 재무 세부 행이 확인되기 전까지 표시하지 않습니다. 계산된 변화분만 표시합니다.</div></section>
-    ${m.ready ? explanation(m) : '<div class="inline-empty">모형 입력값이 모두 준비되면 의사결정 → KPI → 재무 → ROI의 계산 경로가 이곳에 나타납니다.</div>'}`;
+function historyDashboard(){
+ const byArea={purchasing:[['투자수익률 (ROI)','−7.7%'],['원자재 거절(불량)','2.9%'],['원자재비','39.5%'],['공급업체 납품신뢰성','92.1%']],operations:[['투자수익률 (ROI)','−7.7%'],['원자재 창고의 공간 활용률','93.4%'],['완제품 창고의 공간 활용률','70.7%'],['생산계획 준수','78.7%']],sales:[['투자수익률 (ROI)','−7.7%'],['총이익 (고객)','€ 903,148'],['제품 진부화','8.1%'],['출하 주문 라인품목 서비스수준','92.0%']],scm:[['투자수익률 (ROI)','−7.7%'],['원자재 가용성','99.4%'],['원자재 재고','4.4 weeks'],['완제품 재고','3.2 weeks']]};
+ const src={purchasing:43,operations:45,sales:38,scm:28}[state.area];
+ return `${heading('대시보드')}<div class="kpi-grid">${byArea[state.area].map(([label,value])=>`<div class="kpi"><small>${info(label)}${h(label)}</small><strong>${h(value)}</strong><span>Round 0 관측</span></div>`).join('')}</div><div class="guidance"><h3>라운드 기록</h3><p>차트는 원본 시계열 자료가 확보되지 않아 재작성하지 않았습니다. 첨부 화면에서 확인 가능한 Round 0 지표를 표시합니다.</p></div>${source(src)}`;
 }
-function explanation(m) {
-  return `<section class="surface explanation"><div class="section-heading"><div><span class="eyebrow">EXPLANATION TRACE</span><h2>왜 ROI가 변했나</h2></div></div><div class="trace-grid"><div><span class="trace-index">01 / DECISION</span><strong>${m.changed.length ? m.changed.map(d => d.label).join(' · ') : '변경 없음'}</strong><small>현재 Round 1 값과 시나리오 값 비교</small></div><div><span class="trace-index">02 / OPERATIONS</span><strong>재고 ${euro(m.inventoryDelta)}</strong><small>서비스 ${delta(m.serviceDeltaPp, '%p')} · 생산 확정구간은 정성 평가</small></div><div><span class="trace-index">03 / FINANCE</span><strong>이익 ${euro(m.profitDelta)}</strong><small>투자자본 ${euro(m.inventoryDelta)} 변화</small></div><div><span class="trace-index">04 / ROI</span><strong>${percent(observedRoi)} → ${percent(m.roi)}</strong><small>추정값 · 실제 Round 1 결과 아님</small></div></div></section>`;
+function historySales(){
+ if(state.tab==='대시보드')return historyDashboard();
+ if(state.tab==='고객')return table('고객 보고서',['고객','달성된 계약지수','서비스수준(개수)','서비스수준(라인품목)','서비스수준(주문)','즉시 가용성','매출액','총이익','고객 확보 유통기한'],[
+  ['Food & Groceries','0.812','94.8%','91.2%','85.5%','91.2%','€ 1,045,136','€ 13,963','85.9%'],
+  ['LAND Market','0.891','94.4%','92.1%','86.9%','90.6%','€ 586,461','€ 9,188','85.3%'],
+  ["Dominick's",'0.982','96.7%','93.2%','91.2%','97.0%','€ 674,658','€ 11,585','86.6%']
+ ],{source:34});
+ if(state.tab==='완제품')return table('제품 보고서',['완제품','주당 수요(개)','주당수요(금액)','판매 단가','제품당 마진','서비스수준(개수)','서비스수준(라인품목)','즉시 가용성','주당 주문 라인품목','할당된 공헌도','치우침','진부화','진부화 금액'],SALES_PRODUCT_REPORT,{source:33});
+ if(state.tab==='고객 제품'||state.tab==='제품 고객')return salesCrossReport(state.tab==='고객 제품');
+ if(state.tab==='의사결정 로그')return `${heading('주문관리')}${row('재고부족 시 분배규칙','비율별')}${heading('카테고리 관리')}${table('고객',['완제품',...CUSTOMERS],PRODUCTS.map((p,i)=>[p,'✓','✓',i<3?'✕':'✓']),{source:25})}`;
+ return `${heading('분석')}<div class="guidance"><h3>서비스와 진부화</h3><p>첨부 화면의 Round 0 대시보드에는 주문 라인품목 서비스수준 92.0%와 제품 진부화 8.1%가 표시됩니다.</p><p>제품·고객 보고서에서 세부 수치를 확인할 수 있습니다.</p></div>${source(38)}`;
 }
-function genericDepartment(id) {
-  const content = {
-    purchasing: ['구매', '공급업체 계약과 원자재 가용성', '납품구간이 길면 같은 가용성을 위해 더 많은 안전재고가 필요할 수 있습니다.', '납품구간 → 원자재 안전재고 → 재고자본 · 공급 안정성', 'p.2–4'],
-    operations: ['운영', '생산 계획과 능력의 연결', '생산 확정구간이 길면 계획은 안정되지만 수요 변화에 대한 대응성은 줄어들 수 있습니다.', '생산 확정구간 → 생산 유연성 → 완제품 가용성', 'p.32–33'],
-    sales: ['영업', '서비스 계약과 실현 매출', '합의 서비스 수준 달성 여부는 보너스와 페널티에 영향을 줄 수 있습니다.', '서비스 수준 → 보너스 / 페널티 → 영업이익', 'p.20–23']
-  }[id];
-  return `${pageHead(`DECISION WORKSPACE / ${id.toUpperCase()}`, content[0], content[1])}<div class="department-grid"><section class="surface department-card"><span class="eyebrow">SOURCE RELATIONSHIP</span><h2>${content[1]}</h2><p>${content[2]}</p><div class="relationship">${content[3].split(' → ').map((x, i) => `<span>${x}</span>${i < content[3].split(' → ').length - 1 ? '<b>→</b>' : ''}`).join('')}</div><small>출처: TFC 역할별 의사결정 보충 설명 ${content[4]}</small></section><section class="surface department-card"><span class="eyebrow">DATA STATUS</span><h2>계약·실적 데이터 대기</h2><p>저장소의 상세 데이터 묶음이 복원되면 업체, 설비, 고객 단위의 관측값과 선택 가능한 의사결정을 연결합니다.</p><div class="data-placeholder"><span>현재 표시 가능한 실제 수치</span><strong>Round 0 재무 기준</strong></div><button class="wide-link" data-page="data">데이터 상태 보기 <span>→</span></button></section></div>`;
+function salesCrossReport(customerFirst){
+ const pairs=[
+  ['Food & Groceries',SALES_PRODUCT_REPORT.map((r,i)=>[r[0],['42,637','7,182','26,777','35,873','5,412','15,539'][i],['€ 15,582','€ 3,208','€ 10,438','€ 6,409','€ 1,406','€ 3,155'][i]])],
+  ['LAND Market',SALES_PRODUCT_REPORT.map((r,i)=>[r[0],['24,756','4,179','15,385','11,935','1,818','5,132'][i],['€ 9,927','€ 2,048','€ 6,580','€ 2,340','€ 518','€ 1,143'][i]])],
+  ["Dominick's",SALES_PRODUCT_REPORT.slice(3).map((r,i)=>[r[0],['70,276','10,512','30,370'][i],['€ 15,187','€ 3,304','€ 7,458'][i]])]
+ ];
+ const rows=pairs.flatMap(([c,rs])=>rs.map(r=>customerFirst?[c,...r]:[r[0],c,...r.slice(1)]));
+ return table(customerFirst?'고객/제품 보고서':'제품 고객 보고서',customerFirst?['고객','완제품','주당 수요(개)','주당수요(금액)']:['완제품','고객','주당 수요(개)','주당수요(금액)'],rows,{source:customerFirst?30:22});
 }
-function scenarios(m) {
-  const records = [{ name: 'Round 0 · 관측', roi: observedRoi, profit: BASELINE.operatingProfit, investment: BASELINE.investment, type: 'observed' }, { name: '현재 시나리오', roi: m.ready ? m.roi : null, profit: m.ready ? m.operatingProfit : null, investment: m.ready ? m.investment : null, type: 'estimated' }, ...state.scenarios.map(s => ({ name: s.name, roi: s.result?.ready ? s.result.roi : null, profit: s.result?.ready ? s.result.operatingProfit : null, investment: s.result?.ready ? s.result.investment : null, type: 'saved', id: s.id }))];
-  return `${pageHead('SCENARIO LIBRARY', 'Scenario Compare', '저장된 의사결정과 계산 결과를 Round 0 기준과 함께 비교합니다.', '<button class="primary-button" data-action="save-scenario">현재 시나리오 저장 <span>＋</span></button>')}<section class="surface finance-surface"><div class="section-heading"><div><span class="eyebrow">COMPARISON</span><h2>시나리오 결과</h2></div>${pill(`${state.scenarios.length}개 저장`)}</div><div class="table-wrap"><table><thead><tr><th>시나리오</th><th>ROI</th><th>영업이익</th><th>투자자본</th><th></th></tr></thead><tbody>${records.map(r => `<tr><td><strong>${escapeHtml(r.name)}</strong> ${pill(r.type === 'observed' ? '관측' : r.type === 'saved' ? '저장' : '현재', r.type === 'observed' ? 'observed' : 'estimated')}</td><td>${valueOrUnknown(r.roi, percent)}</td><td>${valueOrUnknown(r.profit)}</td><td>${valueOrUnknown(r.investment)}</td><td>${r.id ? `<button class="table-action" data-action="load-scenario" data-id="${r.id}">불러오기</button><button class="table-action danger" data-action="delete-scenario" data-id="${r.id}">삭제</button>` : ''}</td></tr>`).join('')}</tbody></table></div><div class="finance-note">비교표는 자동으로 “최선” 시나리오를 선택하지 않습니다. 서비스 수준과 모델 불확실성도 함께 검토하세요.</div></section>`;
+function historyPurchasing(){
+ if(state.tab==='대시보드')return historyDashboard();
+ if(state.tab==='공급업체')return table('공급업체',['공급업체/원자재','납품신뢰성 (%)','거부율 (%)','납품 횟수','주문 라인품목','구매금액','운송비'],[
+  ['Mono Packaging Materials / 1 리터 팩','92.3%','3.6%','5.7','5.7','€ 110,692','€ 4,552'],
+  ['Trio PET PLC / PET','84.1%','5.9%','5.9','5.9','€ 307,931','€ 145,393'],
+  ['Miami Oranges / 오렌지','97.8%','1.0%','5.4','5.4','€ 409,042','€ 35,046'],
+  ['NO8DO Mango / 망고','93.7%','0.5%','5.3','5.3','€ 81,658','€ 3,314'],
+  ['Seitan Vitamins / 비타민 C','81.5%','1.2%','4.7','4.7','€ 2,295','€ 1,592']
+ ],{source:44});
+ if(state.tab==='원자재/구성품')return table('원자재',['원자재','납품신뢰성 (%)','거부율 (%)','구매','구매금액','운송비','주당수요','구매단가','주문크기'],[
+  ['1 리터 팩','92.3%','3.6%','5.7','€ 110,692','€ 4,552','132,257','€ 0.0311','619,636'],
+  ['PET','84.1%','5.9%','5.9','€ 307,931','€ 145,393','204,297','€ 0.0547','951,612'],
+  ['오렌지','97.8%','1.0%','5.4','€ 409,042','€ 35,046','35,360','€ 0.4392','172,581'],
+  ['망고','93.7%','0.5%','5.3','€ 81,658','€ 3,314','3,165','€ 0.9925','15,497'],
+  ['비타민 C','81.5%','1.2%','4.7','€ 2,295','€ 1,592','184','€ 0.4729','1,032']
+ ],{source:46});
+ if(state.tab==='의사결정 로그')return purchasingCurrent();
+ return `${heading('분석')}<div class="guidance"><h3>Round 0 구매 지표</h3><p>공급업체 납품신뢰성 92.1%, 원자재 거절(불량) 2.9%, 원자재비 39.5%가 첨부 화면에 표시됩니다.</p></div>${source(43)}`;
 }
-function sensitivity(m) {
-  const id = 'fgSafety', base = state.decisions[id]?.scenario;
-  let points = [];
-  if (m.ready && base != null) {
-    for (let offset = -2; offset <= 2; offset++) {
-      const v = Math.max(0, base + offset * 0.5);
-      const next = structuredClone(state.decisions); next[id].scenario = v;
-      const r = simulate(next, state.calibration);
-      points.push({ x: v, y: r.ready ? r.roi : null });
-    }
-  }
-  const ys = points.map(p => p.y).filter(x => x != null), min = Math.min(...ys), max = Math.max(...ys), range = Math.max(0.01, max - min);
-  return `${pageHead('WHAT-IF ANALYSIS', 'Sensitivity Analysis', '완제품 안전재고를 현재 시나리오 주변에서 바꾸며 ROI 민감도를 확인합니다.')}${m.ready ? `<section class="surface sensitivity-surface"><div class="section-heading"><div><span class="eyebrow">ONE VARIABLE AT A TIME</span><h2>완제품 안전재고 · ROI</h2></div>${pill('0.5 weeks 간격')}</div><div class="bar-chart">${points.map(p => `<div class="bar-col"><span>${percent(p.y)}</span><div class="bar-track"><div style="height:${Math.max(6, ((p.y - min) / range * 80 + 20))}%"></div></div><strong>${number(p.x, 1)}w</strong></div>`).join('')}</div><div class="finance-note">서비스·진부화 계수는 사용자가 입력한 가정입니다. 관측 라운드 결과로 재보정하기 전에는 의사결정 근거로 단독 사용하지 마세요.</div></section>` : '<div class="inline-empty">의사결정과 모형 입력값을 채우면 민감도 그래프가 계산됩니다.</div>'}`;
+function historyScm(){
+ if(state.tab==='대시보드')return historyDashboard();
+ if(state.tab==='원자재')return table('원자재',['원자재','납품신뢰성','재고(개수 또는 리터)','재고 (weeks)','재고 금액','경제적 원자재 재고','주당수요','진부화','원자재 가용성','치우침','구매량','주문 크기'],SCM_RAW_REPORT,{source:48});
+ if(state.tab==='완제품')return table('완제품',['완제품','주당 수요','서비스수준(개수)','서비스수준(라인품목)','재고 (weeks)','재고 금액','경제적 재고','유통적 재고액','진부화','진부화 금액','예측 오차','치우침','생산 배치','최초 가동 생산성 손실','불량 금액','생산계획 준수'],SCM_FG_REPORT,{source:23});
+ if(state.tab==='의사결정 로그')return `${heading('재고관리 요소')}${table('원자재',['원자재','안전재고 (weeks)','주문크기 (weeks)'],SCM_MATERIAL_VALUES.map(m=>[m.name,m.safety,m.lot]),{source:26})}${heading('생산관리')}${row('생산확정 구간 (weeks)','3')}${table('완제품',['완제품','생산간격 (days)','안전재고 (weeks)'],SCM_PRODUCT_VALUES.map(p=>[p.name,p.interval,p.safety]),{source:26})}`;
+ return `${heading('분석')}<div class="guidance"><h3>재고 확보</h3><p>원자재 가용성 99.4%, 원자재 재고 4.4주, 완제품 재고 3.2주가 Round 0 대시보드에 표시됩니다.</p></div>${source(28)}`;
 }
-function dataPage() {
-  return `${pageHead('PROVENANCE & MODEL', 'Data / Assumptions', '모든 수치의 출처와 계산 상태를 확인합니다.')}
-    <div class="data-grid"><section class="surface data-card"><span class="eyebrow">OBSERVED / ROUND 0</span><h2>확인된 기준점</h2><div class="data-line"><span>영업이익</span><strong>${euro(BASELINE.operatingProfit, 4)}</strong></div><div class="data-line"><span>총 투자자본</span><strong>${euro(BASELINE.investment, 4)}</strong></div><div class="data-line"><span>보고서 ROI</span><strong>${number(BASELINE.reportedRoi, 2)}%</strong></div><p>출처: FinanceReport_0라운드.xlsx 추출 결과 · DATA_COVERAGE_AUDIT.md</p></section><section class="surface data-card"><span class="eyebrow">UNAVAILABLE / ROUND 1</span><h2>현재 누락된 원본 값</h2><p>저장소의 압축 데이터 묶음은 복원되지 않습니다. Round 1 화면의 현재 의사결정 값, 세부 재무행, 제품별 수요·재고는 확인 전까지 빈 값으로 유지합니다.</p><div class="data-line"><span>Round 1 실현 ROI</span><strong>미발생 / 미관측</strong></div><div class="data-line"><span>Round 1 결정값</span><strong>원본 대기</strong></div></section><section class="surface data-card span-two"><span class="eyebrow">MODEL METHODS</span><h2>계산 방식과 경계</h2><div class="method-grid"><div><strong>확정된 회계식</strong><p>ROI = 영업이익 ÷ 총 투자자본. Round 0 수치로 보고서 표기값을 재현합니다.</p></div><div><strong>명시적 대체 모형</strong><p>재고 증분은 주간 수요 × 안전재고 또는 순환재고 변화 × 단위 재고가치로 계산합니다.</p></div><div><strong>사용자 보정 계수</strong><p>서비스 변화, 재고보유비, 진부화율은 TFC 내부 공식이 확인되지 않아 사용자가 입력합니다.</p></div><div><strong>기준점 가정</strong><p>Round 1의 현재 재무 실적이 없으므로 Round 0 재무 결과에 시나리오 증분을 더합니다. 따라서 결과는 조건부 추정입니다.</p></div><div><strong>아직 정량화하지 않은 효과</strong><p>생산 확정구간, 계약지수, 능력·노무, 구매 가격, 보너스·페널티 효과는 관계만 표시합니다.</p></div></div><button class="text-link" data-action="open-calibration">보정값 입력 →</button></section></div>`;
+function historyOperations(){
+ if(state.tab==='대시보드')return historyDashboard();
+ if(state.tab==='창고보고')return table('창고',['원자재 입고/완제품 출고','캐파','실제 사용량','공간 활용률','초과율','주당 주문 라인품목','주당 파레트/탱크의 수','주당 작업 시간','임시직'],[
+  ['원자재 창고','900','840','93.4%','10.8%','1.0','212.4','74','0.2'],
+  ['네덜란드 유통센터 / 완제품 창고','1,500','1,061','70.7%','0.1%','17.8','334.5','100','0.1']
+ ],{source:31});
+ if(state.tab==='혼합공정과 용기주입공정')return table('혼합과 용기주입',['라인','가동시간 (hours)','작업변경 시간','고장시간','미사용 캐파','초과근무','가동시간 (%)','작업변경시간 (%)','고장시간 (%)','미사용 캐파 (%)','초과근무 (%)','최초 가동 생산성 손실','생산계획 준수율'],[
+  ['스위스 필2','62.6','12.1','10.8','3.9','9.4','78.2%','15.1%','13.6%','4.9%','11.7%','€ 8,435','78.7%']
+ ],{source:36});
+ if(state.tab==='의사결정 로그')return CURRENT_TABS.operations.map(operationBlock).join('');
+ return `${heading('분석')}<div class="guidance"><h3>Round 0 운영 지표</h3><p>원자재 창고의 공간 활용률은 93.4%, 완제품 창고의 공간 활용률은 70.7%, 생산계획 준수는 78.7%입니다.</p></div>${source(45)}`;
 }
-function render() {
-  const m = model(); renderNav();
-  document.querySelector('#view').innerHTML = ({ dashboard: () => dashboard(m), supply: () => supply(m), finance: () => finance(m), purchasing: () => genericDepartment('purchasing'), operations: () => genericDepartment('operations'), sales: () => genericDepartment('sales'), scenarios: () => scenarios(m), sensitivity: () => sensitivity(m), data: dataPage })[state.page]();
+function financeView(){
+ const rows=[['매출액','€ 2,306,255','관측'],['총이익','€ 903,148','관측'],['판매 및 관리비','€ 1,209,651','관측'],['영업이익',euro(BASELINE.operatingProfit),'관측'],['총 투자자본',euro(BASELINE.investment),'관측'],['투자수익률 (ROI)',pct(BASELINE.reportedRoi),'관측']];
+ return `${heading('재무보고서 · Round 0')}${table('재무 성과',['항목','Round 0','상태'],rows)}<div class="formula-note">ROI = 영업이익 ÷ 총 투자자본 = ${pct(BASELINE.operatingProfit/BASELINE.investment*100)} · 보고서 표기 ${pct(BASELINE.reportedRoi)}</div><p class="footnote">영업이익·총 투자자본: FinanceReport_0라운드.xlsx 추출 수치. 매출액·총이익·판매 및 관리비: 첨부 화면 #1의 반올림 표시값. Round 1 실적은 아직 없습니다.</p>`;
 }
-function renderCalibration() {
-  document.querySelector('#calibration-fields').innerHTML = CALIBRATION.map(field => `<label class="calibration-field"><span><strong>${field.label}</strong>${pill(field.kind === 'observed' ? '관측 입력' : '가정 입력', field.kind === 'observed' ? 'observed' : 'estimated')}</span><small>${field.help}</small><div class="calibration-control"><input type="number" inputmode="decimal" min="0" step="any" data-calibration="${field.id}" value="${state.calibration[field.id] ?? ''}" placeholder="미입력"><span>${field.unit}</span></div></label>`).join('');
+function scalar(values,key){const xs=values.map(x=>Number(x[key]));return xs.every(x=>Number.isFinite(x)&&x===xs[0])?xs[0]:null}
+function modelDecisions(){
+ const materials=SCM_MATERIAL_VALUES.map(x=>record('material',x.name,x));
+ const products=SCM_PRODUCT_VALUES.map(x=>record('product',x.name,x));
+ const frozen=Number(record('production','생산관리',{frozen:'3'}).frozen);
+ const pair=(base,scenario)=>({base,scenario});
+ return {rawSafety:pair(2,scalar(materials,'safety')),rawLot:pair(4,scalar(materials,'lot')),fgSafety:pair(3,scalar(products,'safety')),productionInterval:pair(10,scalar(products,'interval')),frozenPeriod:pair(3,Number.isFinite(frozen)?frozen:null)};
 }
-function openCalibration() { renderCalibration(); document.querySelector('#calibration-dialog').showModal(); }
-function parseInput(value) { return value.trim() === '' ? null : Number(value); }
-document.addEventListener('click', event => {
-  const page = event.target.closest('[data-page]');
-  if (page) { state.page = page.dataset.page; persist(); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
-  const button = event.target.closest('[data-action]');
-  if (!button) return;
-  const action = button.dataset.action;
-  if (action === 'open-calibration') openCalibration();
-  if (action === 'run') { state.page = 'finance'; persist(); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-  if (action === 'save-scenario') {
-    const name = prompt('시나리오 이름을 입력하세요', `Scenario ${state.scenarios.length + 1}`);
-    if (!name?.trim()) return;
-    state.scenarios.push({ id: crypto.randomUUID(), name: name.trim(), decisions: structuredClone(state.decisions), calibration: structuredClone(state.calibration), result: model() });
-    persist(); render();
-  }
-  if (action === 'load-scenario') {
-    const saved = state.scenarios.find(s => s.id === button.dataset.id);
-    if (saved) { state.decisions = structuredClone(saved.decisions); state.calibration = structuredClone(saved.calibration); state.page = 'supply'; persist(); render(); }
-  }
-  if (action === 'delete-scenario') { state.scenarios = state.scenarios.filter(s => s.id !== button.dataset.id); persist(); render(); }
+function simulatorView(){
+ const decisions=modelDecisions(),result=simulate(decisions,state.calibration);
+ if(state.tab==='시나리오 비교')return `${heading('시나리오 비교')}<div class="guidance"><h3>저장한 결정안</h3><p>Round 0 관측 기준과 현재 결정안, 저장한 결정안을 함께 봅니다. 저장된 결과는 당시 보정 입력값을 사용한 조건부 추정입니다.</p><button class="save-button" type="button" data-save-scenario>현재 시나리오 저장</button></div>${table('결과 비교',['시나리오','ROI','영업이익','총 투자자본','상태','작업'],[
+  ['Round 0 · 관측',pct(BASELINE.reportedRoi),euro(BASELINE.operatingProfit),euro(BASELINE.investment),'관측','—'],
+  ['현재 시나리오',result.ready?pct(result.roi):'계산 대기',result.ready?euro(result.operatingProfit):'—',result.ready?euro(result.investment):'—','조건부 추정','—'],
+  ...state.scenarios.map(s=>[s.name,s.result?.ready?pct(s.result.roi):'계산 대기',s.result?.ready?euro(s.result.operatingProfit):'—',s.result?.ready?euro(s.result.investment):'—','저장됨',`<button class="mini-action" data-load-scenario="${h(s.id)}">불러오기</button><button class="mini-action danger" data-delete-scenario="${h(s.id)}">삭제</button>`])
+ ],{htmlLast:true})}`;
+ if(state.tab==='민감도'){
+  const base=decisions.fgSafety.scenario;
+  const points=result.ready&&base!=null?[-1,-0.5,0,0.5,1].map(delta=>{const next=structuredClone(decisions);next.fgSafety.scenario=Math.max(0,base+delta);const r=simulate(next,state.calibration);return [next.fgSafety.scenario,r.ready?r.roi:null]}):[];
+  const ys=points.map(p=>p[1]).filter(Number.isFinite),min=Math.min(...ys),max=Math.max(...ys),range=Math.max(0.01,max-min);
+  return `${heading('완제품 안전재고 민감도')}${result.ready?`<div class="sensitivity-bars">${points.map(([x,y])=>`<div><strong>${pct(y)}</strong><span class="bar-track"><span style="height:${Math.round(20+70*(y-min)/range)}%"></span></span><small>${fmt(x,1)} weeks</small></div>`).join('')}</div><p class="footnote">안전재고만 0.5주씩 변경한 기존 대체 모형의 결과입니다. 서비스와 진부화 계수는 사용자가 입력한 가정입니다.</p>`:'<div class="guidance"><p>모든 품목의 설정이 같고 필요한 보정값이 입력되면 민감도를 계산합니다.</p></div>'}`;
+ }
+ if(state.tab==='모형 입력값')return `${heading('모형 입력값')}<div class="guidance"><h3>보정 데이터</h3><p>값을 입력하면 정량 계산에 사용합니다. TFC 내부 계수는 확인되지 않았으며, 가정값은 실제 게임 공식이 아닙니다.</p><button class="save-button" data-open-calibration type="button">모형 입력값 설정</button></div>${table('입력 상태',['항목','값','구분'],CALIBRATION.map(c=>[c.label,state.calibration[c.id]??'미입력',c.kind==='observed'?'관측 입력':'가정 입력']))}`;
+ if(state.tab==='설명 경로')return `${heading('설명 경로')}<div class="guidance"><h3>의사결정 → KPI → 재무 → ROI</h3><p>원자재 안전재고·주문크기와 완제품 안전재고·생산간격이 모두 각 품목에 동일하게 설정된 경우에만 기존 집계 모형으로 연결합니다.</p><p>제품별 수요와 비용 데이터가 없어 품목별 변경을 임의 평균으로 환산하지 않습니다. 구매, 생산운영, 판매의 변경값 역시 현재 ROI 수치에는 포함되지 않습니다.</p><p>ROI = 영업이익 ÷ 총 투자자본. 보정값이 완성되면 각 비용·수익 변화의 계산 경로를 표시합니다.</p></div>${result.ready?table('조건부 결과',['단계','값'],[['원자재 재고 변화',euro(result.rawInventoryDelta)],['완제품 재고 변화',euro(result.fgInventoryDelta)],['재고보유비 변화',euro(result.holdingCostDelta)],['매출 변화',euro(result.revenueDelta)],['진부화 비용 변화',euro(result.obsolescenceCostDelta)],['영업이익 변화',euro(result.profitDelta)],['총 투자자본 변화',euro(result.inventoryDelta)],['ROI',pct(result.roi)] ]):'<p class="footnote">필요한 결정값 또는 보정값이 부족하여 정량 경로를 표시할 수 없습니다.</p>'}`;
+ const invalid=Object.entries(decisions).filter(([k,v])=>k!=='frozenPeriod'&&v.scenario===null).map(([k])=>k);
+ return `${heading('Round 1 · 사전 의사결정 시뮬레이터')}<div class="simulation-summary"><div><small>ROUND 0 · 관측</small><strong>${pct(BASELINE.reportedRoi)}</strong><span>실현된 기준점</span></div><div><small>ROUND 1 · 조건부 추정</small><strong>${result.ready?pct(result.roi):'계산 대기'}</strong><span>${result.ready?'사용자 보정값을 적용한 시나리오':'실현 성과 아님'}</span></div></div><div class="guidance"><h3>결정값 연결 상태</h3><p>${invalid.length?'품목별 설정이 달라 단일 집계값으로 표현할 수 없습니다: '+invalid.join(', '):'원자재 5종 및 완제품 6종의 설정이 각 항목에서 동일하므로 집계 모형에 연결했습니다.'}</p><p>보정 입력 ${CALIBRATION.filter(c=>state.calibration[c.id]!=null).length} / ${CALIBRATION.length}개 완료. 현재 추정은 Round 0 회계를 기준으로 한 조건부 모형입니다.</p><button class="save-button" data-open-calibration type="button">모형 입력값 설정</button></div>${table('Round 1 설정',['의사결정','Round 0 기록','Round 1 현재'],[['원자재 안전재고','2.0 weeks',decisions.rawSafety.scenario??'품목별 상이'],['원자재 주문크기','4.0 weeks',decisions.rawLot.scenario??'품목별 상이'],['완제품 안전재고','3.0 weeks',decisions.fgSafety.scenario??'품목별 상이'],['생산간격','10 days',decisions.productionInterval.scenario??'품목별 상이'],['생산확정 구간','3 weeks',decisions.frozenPeriod.scenario??'미입력']])}`;
+}
+function render(){
+ renderChrome();
+ const view=state.area==='company'?companyView():state.area==='finance'?financeView():state.area==='simulator'?simulatorView():state.round===1?({purchasing:purchasingCurrent,operations:operationsCurrent,sales:salesCurrent,scm:scmCurrent})[state.area]():({purchasing:historyPurchasing,operations:historyOperations,sales:historySales,scm:historyScm})[state.area]();
+ document.querySelector('#view').innerHTML=view;
+}
+const EDITS={
+ supplier:[['index','계약지수','number'],['quality','품질','select','높음|중간|나쁨'],['lead','리드타임 (days)','number'],['cert','인증','select','✓|✕'],['country','국가','text'],['capacity','여유캐파','text'],['payment','지불조건 (weeks)','number'],['unit','거래단위','text'],['reliability','합의된 납품신뢰성 (%)','text'],['window','납품구간','text']],
+ customer:[['index','계약지수','number'],['type','서비스수준 유형','text'],['service','서비스수준 (%)','number'],['shelf','유통기한 (%)','number'],['cutoff','주문 마감시간','text'],['unit','거래단위','text'],['payment','지불조건 (weeks)','number'],['pressure','판촉압력','select','낮음|중간|높음'],['forecast','판촉행사 사전예고','select','짧은|중간|긴']],
+ material:[['safety','안전재고 (weeks)','number'],['lot','주문크기 (weeks)','number']],
+ product:[['interval','생산간격 (days)','number'],['safety','안전재고 (weeks)','number'],['warehouse','창고','text']],
+ production:[['frozen','생산확정 구간 (weeks)','number']],
+ warehouse:[['pallet','파레트 위치 개수','number'],['staff','정직원 수','number']],
+ mixing:[['machine','혼합기','text']],
+ bottling:[['line','용기주입 라인','text'],['shifts','교대근무 횟수','number'],['smed','SMED','select','사용|사용 안 함'],['speed','속도 증가','select','사용|사용 안 함']],
+ order:[['rule','재고부족 시 분배규칙','select','비율별|고객 우선순위']],
+ categories:[...CUSTOMERS.flatMap((c,i)=>PRODUCTS.map((p,j)=>[`${i}:${j}`,`${c} · ${p}`,'checkbox']))]
+};
+function originalFor(kind,name){return ({supplier:()=>SUPPLIERS.find(x=>x.name===name),customer:()=>CUSTOMER_CONTRACTS.find(x=>x.name===name),material:()=>SCM_MATERIAL_VALUES.find(x=>x.name===name),product:()=>SCM_PRODUCT_VALUES.find(x=>x.name===name),production:()=>({frozen:'3'}),warehouse:()=>name==='원자재 창고'?{pallet:'900',staff:'5'}:{pallet:'1500',staff:'4'},mixing:()=>({machine:'푸르트믹스 MQ'}),bottling:()=>({line:'스위스 필2',shifts:'2',smed:'사용',speed:'사용 안 함'}),order:()=>({rule:'비율별'}),categories:()=>Object.fromEntries(CUSTOMERS.flatMap((c,i)=>PRODUCTS.map((p,j)=>[`${i}:${j}`,i<2||j>=3])))})[kind]?.()||{}}
+function openEdit(kind,name){
+ if(state.round!==1)return;
+ editing={kind,name};const v=record(kind,name,originalFor(kind,name));
+ document.querySelector('#edit-kicker').textContent='ROUND 1 · '+({supplier:'구매',customer:'판매',material:'공급사슬',product:'공급사슬',production:'공급사슬',warehouse:'생산운영',mixing:'생산운영',bottling:'생산운영',order:'판매',categories:'판매'}[kind]||'');
+ document.querySelector('#edit-title').textContent=name;
+ document.querySelector('#edit-fields').innerHTML=EDITS[kind].map(([id,label,type,options])=>`<label class="edit-field"><span>${h(label)}</span>${type==='select'?`<select name="${h(id)}">${options.split('|').map(o=>`<option value="${h(o)}" ${v[id]===o?'selected':''}>${h(o)}</option>`).join('')}</select>`:type==='checkbox'?`<input name="${h(id)}" type="checkbox" ${v[id]?'checked':''}>`:`<input name="${h(id)}" type="${type}" ${type==='number'?'min="0" step="any"':''} value="${h(v[id]??'')}" required>`}</label>`).join('');
+ document.querySelector('#edit-dialog').showModal();
+}
+function openCalibration(){
+ document.querySelector('#calibration-fields').innerHTML=CALIBRATION.map(c=>`<label class="edit-field"><span>${h(c.label)} <small>${c.kind==='observed'?'관측 입력':'가정 입력'}</small></span><input type="number" min="0" step="any" name="${h(c.id)}" value="${state.calibration[c.id]??''}" placeholder="미입력"><small>${h(c.help)} · ${h(c.unit)}</small></label>`).join('');
+ document.querySelector('#calibration-dialog').showModal();
+}
+document.addEventListener('click',e=>{
+ const area=e.target.closest('[data-area]');if(area){select(area.dataset.area);return}
+ const dept=e.target.closest('[data-dept]');if(dept){select(dept.dataset.dept);return}
+ const round=e.target.closest('[data-round]');if(round&&!round.disabled){state.round=Number(round.dataset.round);state.tab=tabsForArea(state.area)[0];persist();render();return}
+ const tab=e.target.closest('[data-tab]');if(tab){state.tab=tab.dataset.tab;persist();render();return}
+ const edit=e.target.closest('[data-edit]');if(edit){openEdit(edit.dataset.edit,edit.dataset.name);return}
+ if(e.target.closest('[data-open-calibration]'))openCalibration();
+ if(e.target.closest('[data-save-scenario]')){const name=prompt('시나리오 이름을 입력하세요',`시나리오 ${state.scenarios.length+1}`);if(!name?.trim())return;state.scenarios.push({id:crypto.randomUUID(),name:name.trim(),edits:structuredClone(state.edits),calibration:structuredClone(state.calibration),result:simulate(modelDecisions(),state.calibration)});persist();render();return}
+ const load=e.target.closest('[data-load-scenario]');if(load){const saved=state.scenarios.find(s=>s.id===load.dataset.loadScenario);if(saved){state.edits=structuredClone(saved.edits);state.calibration=structuredClone(saved.calibration);state.tab='시나리오';persist();render()}return}
+ const remove=e.target.closest('[data-delete-scenario]');if(remove){state.scenarios=state.scenarios.filter(s=>s.id!==remove.dataset.deleteScenario);persist();render()}
 });
-document.addEventListener('change', event => {
-  const input = event.target.closest('[data-decision]');
-  if (!input) return;
-  state.decisions[input.dataset.decision][input.dataset.side] = parseInput(input.value);
-  persist(); render();
+document.querySelector('#source-help').addEventListener('click',()=>select('company','자료 안내'));
+document.querySelector('#close-edit').addEventListener('click',()=>document.querySelector('#edit-dialog').close());
+document.querySelector('#cancel-edit').addEventListener('click',()=>document.querySelector('#edit-dialog').close());
+document.querySelector('#close-calibration').addEventListener('click',()=>document.querySelector('#calibration-dialog').close());
+document.querySelector('#edit-form').addEventListener('submit',e=>{
+ e.preventDefault();if(!editing)return;
+ const patch={};const form=e.currentTarget;
+ for(const [id,,type] of EDITS[editing.kind]){const control=form.elements.namedItem(id);patch[id]=type==='checkbox'?control.checked:control.value}
+ state.edits[editKey(editing.kind,editing.name)]=patch;persist();document.querySelector('#edit-dialog').close();editing=null;render();
 });
-document.querySelector('#open-calibration').addEventListener('click', openCalibration);
-document.querySelector('#notice-action').addEventListener('click', openCalibration);
-document.querySelector('#calibration-form').addEventListener('submit', event => {
-  if (event.submitter?.value === 'cancel') return;
-  for (const input of document.querySelectorAll('[data-calibration]')) state.calibration[input.dataset.calibration] = parseInput(input.value);
-  persist(); render();
+document.querySelector('#calibration-form').addEventListener('submit',e=>{
+ e.preventDefault();for(const c of CALIBRATION){const value=e.currentTarget.elements.namedItem(c.id).value;state.calibration[c.id]=value===''?null:Number(value)}
+ persist();document.querySelector('#calibration-dialog').close();render();
 });
-document.querySelector('#clear-calibration').addEventListener('click', () => { state.calibration = emptyCalibration(); persist(); renderCalibration(); render(); });
+document.querySelector('#clear-calibration').addEventListener('click',()=>{state.calibration=emptyCalibration();persist();document.querySelector('#calibration-dialog').close();render()});
 render();
