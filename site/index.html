@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17243a">
+  <title>TFC Digital Twin · Pre-Round ROI Simulator</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">T<span>·</span></span><div><strong>TFC Digital Twin</strong><small>PRE-ROUND ROI SIMULATOR</small></div></div>
+      <div class="sidebar-meta"><span class="live-dot"></span> ROUND 1 <span class="meta-separator">/</span> DECISION SPACE</div>
+      <nav id="nav" aria-label="주 메뉴"></nav>
+      <div class="sidebar-bottom"><span class="source-dot"></span><div><strong>Source status</strong><small>재무 기준 확인 · 상세 데이터 대기</small></div></div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="breadcrumb">WORKSPACE <span>/</span> <strong id="breadcrumb-current">Overview</strong></div>
+        <div class="top-actions"><span class="round-chip">R1 <span>시나리오</span></span><button class="outline-button" id="open-calibration">모형 입력값 <span class="arrow">↗</span></button></div>
+      </header>
+
+      <div class="page-wrap">
+        <div class="notice" id="data-notice"><span class="notice-icon">i</span><div><strong>데이터 연결 상태</strong><span>Round 0 재무 기준은 관측값입니다. 저장소의 상세 데이터 묶음이 현재 복원되지 않아 Round 1 결과는 보정 입력 후에만 계산합니다.</span></div><button id="notice-action">입력값 설정 →</button></div>
+        <section id="view" aria-live="polite"></section>
+      </div>
+    </main>
+  </div>
+
+  <dialog id="calibration-dialog" class="modal">
+    <form method="dialog" class="modal-card" id="calibration-form">
+      <div class="modal-heading"><div><span class="eyebrow">MODEL CALIBRATION</span><h2>모형 입력값</h2><p>관측 자료 또는 명시적인 가정값을 입력하세요. 빈 칸은 알 수 없는 값으로 유지됩니다.</p></div><button class="icon-button" value="cancel" aria-label="닫기">×</button></div>
+      <div class="modal-body" id="calibration-fields"></div>
+      <div class="modal-footer"><button class="ghost-button" type="button" id="clear-calibration">입력값 지우기</button><button class="primary-button" type="submit" value="save">저장하고 계산</button></div>
+    </form>
+  </dialog>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

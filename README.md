@@ -1,5 +1,17 @@
 # The Fresh Connection - Pre-Round ROI Simulator Knowledge Pack
 
+## Web prototype
+
+The current interactive prototype is in [`site/`](site/). Run it locally with:
+
+```bash
+python3 -m http.server 8765 --directory site
+```
+
+Then open <http://127.0.0.1:8765/>. Enter the current Round 1 settings and proposed values under **Supply Chain**, then fill **모형 입력값** to calculate a conditional ROI bridge. Scenarios are stored in this browser's local storage. The interface is in Korean.
+
+The verified Round 0 operating profit, investment, and ROI are built in. The complete machine-readable bundle described below is not present in the current `main` branch, so detailed Round 1 settings and finance rows remain unknown. The website never presents a fabricated Round 1 result. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the data schema, provenance, calculation method, and limitations.
+
 This repository is the source-of-truth context for building a **pre-round ROI estimator / digital twin** for The Fresh Connection (TFC).
 
 ## Goal
