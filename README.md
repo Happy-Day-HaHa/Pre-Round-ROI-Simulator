@@ -8,9 +8,16 @@ The current interactive prototype is in [`site/`](site/). Run it locally with:
 python3 -m http.server 8765 --directory site
 ```
 
-Then open <http://127.0.0.1:8765/>. The Korean interface follows the supplied game screenshots: select a round in the orange rail, a department across the top, then an activity tab. Round 0 reports and decision logs are read-only. Round 1 decision rows have **변경** controls and save changes in this browser's local storage. The **시뮬레이터** rail item shows the conditional ROI bridge and its calibration inputs.
+Then open <http://127.0.0.1:8765/>. The Korean interface follows the supplied game screenshots: select a round in the orange rail, a department across the top, then an activity tab. Round 0 reports and decision logs are read-only. On Round 1, edit a department decision and save it. The saved Purchasing, Operations, Sales, and Supply Chain decisions form one scenario. Each save recalculates the expected ROI in the sticky header and shows the financial impact. There is no separate model-input form. Department and full-scenario reset controls are available.
 
-The verified Round 0 operating profit, investment, and ROI are built in. Visible supplier, customer, operations, SCM, and report values were transcribed from the screenshots supplied for the interface request; each screen cites its screenshot number. The complete machine-readable bundle described below is not present in the current `main` branch. Product-specific changes are not converted to an aggregate prediction unless the corresponding settings are identical across all rows. No realized Round 1 ROI is shown. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the model and limitations.
+The verified Round 0 operating profit, investment, and ROI are built in. Visible supplier, customer, operations, SCM, and report values were transcribed from the supplied screenshots; each screen cites its screenshot number. The complete machine-readable bundle described below is not present in the current `main` branch. The automatic ROI is a **surrogate estimate**, not an official TFC result or a validated Round 1 forecast. Its coefficients are disclosed in `site/model.js` and `docs/ARCHITECTURE.md`. Product-specific SCM changes are calculated separately using each product's Round 0 report values. No realized Round 1 ROI is shown.
+
+Run the calculation and save-flow checks with:
+
+```bash
+/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc --module-file=tests/model.test.mjs
+/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc --module-file=tests/ui.test.mjs
+```
 
 This repository is the source-of-truth context for building a **pre-round ROI estimator / digital twin** for The Fresh Connection (TFC).
 

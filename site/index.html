@@ -11,7 +11,7 @@
   <div class="shell">
     <header class="masthead">
       <div class="logo"><span class="logo-mark">ṅ</span><strong>The <em>Fresh</em> Connection</strong></div>
-      <div class="mast-actions"><span class="saved-state" id="saved-state" aria-live="polite">변경 내용은 이 브라우저에 저장됩니다</span><button class="help-button" id="source-help" type="button">출처 · 사용 안내</button></div>
+      <div class="mast-actions"><div class="global-roi" id="global-roi" aria-live="polite"></div><span class="saved-state" id="saved-state" aria-live="polite">결정값은 이 브라우저에 저장됩니다</span><button class="help-button" id="source-help" type="button">출처 · 사용 안내</button></div>
     </header>
     <div class="body-shell">
       <aside class="side-rail" aria-label="주 메뉴">
@@ -27,14 +27,15 @@
         <nav class="department-bar" id="department-bar" aria-label="부서 선택"></nav>
         <div class="workspace-inner">
           <div class="page-message" id="page-message" aria-live="polite"></div>
+          <div class="scenario-actions" id="scenario-actions"></div>
+          <div class="impact-panel" id="impact-panel" aria-live="polite"></div>
           <nav class="subtabs" id="subtabs" aria-label="업무 탭"></nav>
           <section id="view" aria-live="polite"></section>
         </div>
       </main>
     </div>
   </div>
-  <dialog class="edit-dialog" id="edit-dialog"><form method="dialog" id="edit-form"><div class="dialog-head"><div><small id="edit-kicker"></small><h2 id="edit-title"></h2></div><button type="button" class="close-button" id="close-edit" aria-label="닫기">×</button></div><div id="edit-fields" class="edit-fields"></div><div class="dialog-footer"><button type="button" class="plain-button" id="cancel-edit">취소</button><button type="submit" class="save-button">변경 저장</button></div></form></dialog>
-  <dialog class="edit-dialog" id="calibration-dialog"><form method="dialog" id="calibration-form"><div class="dialog-head"><div><small>SIMULATION CALIBRATION</small><h2>모형 입력값</h2></div><button type="button" class="close-button" id="close-calibration" aria-label="닫기">×</button></div><p class="dialog-copy">TFC 보고서 값, 보고서 기반 계산값, 모형 가정을 구분해 입력합니다. 필요한 값이 비어 있으면 예측 ROI는 표시하지 않습니다.</p><div id="calibration-fields" class="edit-fields"></div><div class="dialog-footer"><button type="button" class="plain-button" id="clear-calibration">입력값 지우기</button><button type="submit" class="save-button">저장하고 계산</button></div></form></dialog>
+  <dialog class="edit-dialog" id="edit-dialog"><form method="dialog" id="edit-form"><div class="dialog-head"><div><small id="edit-kicker"></small><h2 id="edit-title"></h2></div><button type="button" class="close-button" id="close-edit" aria-label="닫기">×</button></div><div id="edit-fields" class="edit-fields"></div><p class="draft-status" id="draft-status" aria-live="polite"></p><div class="dialog-footer"><button type="button" class="plain-button" id="cancel-edit">취소</button><button type="submit" class="save-button">결정 저장 · ROI 재계산</button></div></form></dialog>
   <script type="module" src="./app.js"></script>
 </body>
 </html>
